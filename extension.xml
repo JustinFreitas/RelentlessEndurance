@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<root version="3.3" release="8.1|CoreRPG:4.1">
+	<announcement text="Relentless Endurance v1.0 FGC/FGU 5E, 5/28/23\r2023 Justin Freitas" font="emotefont" icon="relentlessendurance_icon" />
+	<properties>
+		<name>Feature: Relentless Endurance</name>
+		<version>1.0</version>
+		<loadorder>1002</loadorder>
+		<author>Justin Freitas</author>
+		<description>Provides Relentless Endurance half-orc racial trait related functionality.</description>
+		<ruleset>
+			<name>5E</name>
+		</ruleset>
+	</properties>
+
+	<base>
+		<script name="RelentlessEndurance" file="scripts/relentlessendurance.lua" />
+		<icon name="relentlessendurance_icon" file="graphics/icons/relentlessendurance_icon.png" />
+		<icon name="white_relentlessendurance_icon" file="graphics/icons/white_relentlessendurance_icon.png" />
+        <includefile source="campaign/ct_host.xml" />
+	</base>
+</root>
