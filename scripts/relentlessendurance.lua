@@ -1,4 +1,4 @@
--- This extension contains 5e SRD mounted combat rules.  For license details see file: Open Gaming License v1.0a.txt
+-- This extension contains 5e SRD Half-Orc racial trait rules.  For license details see file: Open Gaming License v1.0a.txt
 local ActionDamage_applyDamage
 local CT = "ct"
 local HP_TEMPORARY = "hp.temporary"
@@ -300,8 +300,6 @@ function applyRelentlessEndurance(nodeCT)
     local nodeTarget = select(2, ActorManager.getTypeAndNode(nodeCT))
     local vPower = getOrCreateRelentlessEndurancePower(nodeTarget)
     local nPrepared, nCast = getPreparedAndCastFromRelentlessEndurancePower(vPower)
-
-    -- TODO: Mark the Power as used.
     if nCast < nPrepared then
         setCastValueOnPower(vPower, nCast + 1)
     else
