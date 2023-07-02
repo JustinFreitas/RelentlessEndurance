@@ -1,4 +1,4 @@
-local BUTTON_POSITION_INDEX = 8
+local BUTTON_POSITION_INDEX = 7
 
 function onInit()
 	if super and super.onInit then
