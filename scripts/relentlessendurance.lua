@@ -265,7 +265,7 @@ function processRelentlessEndurance(aRelentlessEnduranceData, nTotal, sDamage, r
             ActionDamage_applyDamage(rSource, rTarget, bSecret, sDamage, nTotal)
         end
 
-        displayChatMessage("Relentless Endurance was applied to " .. sDisplayName)
+        displayChatMessage("Relentless Endurance was applied to " .. sDisplayName .. ".")
         return true
     end
 end
