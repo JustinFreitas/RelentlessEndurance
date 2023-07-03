@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="iso-8859-1"?>
 <root version="3.3" release="8.1|CoreRPG:4.1">
-	<announcement text="Relentless Endurance v1.0 FGC/FGU 5E,\r7/2/23\, 2023 Justin Freitas" font="emotefont" icon="relentlessendurance_icon" />
+	<announcement text="Relentless Endurance v1.0 FGC/FGU 5E,\r2023 Justin Freitas, 7/2/23" font="emotefont" icon="relentlessendurance_icon" />
 	<properties>
 		<name>Feature: Relentless Endurance</name>
 		<version>1.0</version>
