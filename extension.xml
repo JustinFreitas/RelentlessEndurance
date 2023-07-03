@@ -4,7 +4,7 @@
 	<properties>
 		<name>Feature: Relentless Endurance</name>
 		<version>1.0</version>
-		<loadorder>1002</loadorder>
+		<loadorder>9996</loadorder>
 		<author>Justin Freitas</author>
 		<description>Provides Relentless Endurance half-orc racial trait related functionality.</description>
 		<ruleset>
