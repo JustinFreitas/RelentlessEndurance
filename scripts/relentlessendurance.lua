@@ -21,11 +21,16 @@ function onInit()
 -- TODO: Option for Automatically setting the RE effect on the actor so that it's enabled on combat start (vs not there and player has to enable if they want to use it), default to On.  Automatic mode should add/remove effect based on available uses on each actor's turn.
 	if USER_ISHOST then
 		Comm.registerSlashHandler("relentless", processChatCommand) -- a command for status of current CT actor and also for subcommands (i.e. clear).
-        ActionDamage_applyDamage = ActionDamage.applyDamage
-        if isClientFGU() then
-            ActionDamage.applyDamage = applyDamage_FGU
-        else
-            ActionDamage.applyDamage = applyDamage_FGC
+        if ActionHealthD20 and ActionHealthD20.apply then
+            ActionDamage_applyDamage = ActionHealthD20.apply
+            ActionHealthD20.apply = applyDamage_v2
+        elseif ActionDamage and ActionDamage.applyDamage then
+            ActionDamage_applyDamage = ActionDamage.applyDamage
+            if isClientFGU() then
+                ActionDamage.applyDamage = applyDamage_FGU
+            else
+                ActionDamage.applyDamage = applyDamage_FGC
+            end
         end
     end
 end
@@ -53,6 +58,27 @@ function applyDamage_FGU(rSource, rTarget, rRoll)
     local bRelentlessEnduranceTriggered
     if hasAvailableRelentlessEndurance(aRelentlessEnduranceData) then
         bRelentlessEnduranceTriggered = processRelentlessEndurance(aRelentlessEnduranceData, rRoll.nTotal, rRoll.sDesc, rSource, rTarget, false, rRoll)
+    end
+
+    if not bRelentlessEnduranceTriggered then
+        ActionDamage_applyDamage(rSource, rTarget, rRoll)
+    end
+end
+
+function applyDamage_v2(rSource, rTarget, rRoll)
+    local isDamageRoll = true
+    if rRoll and rRoll.sDesc then
+        if rRoll.sDesc:match("%[HEAL") or rRoll.sDesc:match("%[RECOVERY") or rRoll.sDesc:match("%[FHEAL") or rRoll.sDesc:match("%[REGEN") then
+            isDamageRoll = false
+        elseif (rRoll.nTotal or 0) < 0 then
+            isDamageRoll = false
+        end
+    end
+
+    local aRelentlessEnduranceData = hasRelentlessEnduranceTrait(rTarget, rRoll)
+    local bRelentlessEnduranceTriggered
+    if hasAvailableRelentlessEndurance(aRelentlessEnduranceData) and isDamageRoll then
+        bRelentlessEnduranceTriggered = processRelentlessEndurance(aRelentlessEnduranceData, rRoll.nTotal, rRoll.sDesc, rSource, rTarget, rRoll.bSecret, rRoll)
     end
 
     if not bRelentlessEnduranceTriggered then
@@ -118,7 +144,7 @@ function getOrCreateRelentlessEndurancePower(vActor)
 
     DB.setValue(nodeNewPower, NAME, "string", "Relentless Endurance")
     DB.setValue(nodeNewPower, "prepared", "number", 1)
-    DB.setValue(nodeNewPower, "cast", "number", 1)
+    DB.setValue(nodeNewPower, "cast", "number", 0)
     DB.setValue(nodeNewPower, "locked", "number", 1)
     DB.setValue(nodeNewPower, "shortdescription", "string", "When you are reduced to 0 hit points but not killed outright, you can drop to 1 hit point instead. You can't use this feature again until you finish a long rest.")
     return nodeNewPower
@@ -244,7 +270,6 @@ function processRelentlessEndurance(aRelentlessEnduranceData, nTotal, sDamage, r
     local nAllHP = aRelentlessEnduranceData.nTotalHP + aRelentlessEnduranceData.nTempHP
     if aRelentlessEnduranceData.nWounds + nTotal >= nAllHP
     and not EffectManager5E.hasEffect(rTarget, UNCONSCIOUS_EFFECT_LABEL) then
-    --and EffectManager5E.hasEffect(rTarget, "Relentless Endurance") then  -- TODO: Do we need this effect at all?
         local sDisplayName = ActorManager.getDisplayName(rTarget)
         local vPower = getOrCreateRelentlessEndurancePower(rTarget)
         local nPrepared, nCast = getPreparedAndCastFromRelentlessEndurancePower(vPower)
@@ -257,7 +282,12 @@ function processRelentlessEndurance(aRelentlessEnduranceData, nTotal, sDamage, r
         setCastValueOnPower(vPower, nCast + 1)
         nTotal = nAllHP - aRelentlessEnduranceData.nWounds - 1
         sDamage = string.gsub(sDamage, "=%-?%d+", "=" .. nTotal)
-        if isClientFGU() then
+
+        if ActionHealthD20 and ActionHealthD20.apply then
+            rDamageRoll.nTotal = tonumber(nTotal)
+            rDamageRoll.sDesc = sDamage
+            ActionDamage_applyDamage(rSource, rTarget, rDamageRoll)
+        elseif isClientFGU() then
             rDamageRoll.nTotal = tonumber(nTotal)
             rDamageRoll.sDesc = sDamage
             ActionDamage_applyDamage(rSource, rTarget, rDamageRoll)
