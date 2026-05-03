@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="iso-8859-1"?>
 <root version="3.3" release="8.1|CoreRPG:4.1">
-	<announcement text="Relentless Endurance v1.0.1 FGC/FGU 5E,\r2023-2026 Justin Freitas, 3/18/26" font="emotefont" icon="relentlessendurance_icon" />
+	<announcement text="Relentless Endurance v1.0.2 FGC/FGU 5E,\r2023-2026 Justin Freitas, 5/3/26" font="emotefont" icon="relentlessendurance_icon" />
 	<properties>
 		<name>Feature: Relentless Endurance</name>
 		<version>1.0.1</version>
@@ -19,3 +19,4 @@
         <includefile source="campaign/ct_host.xml" />
 	</base>
 </root>
+

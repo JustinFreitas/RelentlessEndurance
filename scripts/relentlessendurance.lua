@@ -14,6 +14,37 @@ local UNCONSCIOUS_EFFECT_LABEL = "Unconscious"
 local USER_ISHOST = false
 local WOUNDS = "wounds"
 
+-- Helper to safely get an actor from a node/string, preferring the modern getActor method.
+local function getActorSafe(v)
+    if ActorManager.getActor then
+        return ActorManager.getActor(v)
+    end
+    return ActorManager.resolveActor(v)
+end
+
+-- Helper to safely get the target node type and node, preferring modern methods.
+local function getTypeAndNodeSafe(v)
+    if ActorManager.isPC and ActorManager.getCreatureNode and ActorManager.getCTNode then
+        local bIsPC = ActorManager.isPC(v)
+        if bIsPC then
+            return PC, ActorManager.getCreatureNode(v)
+        else
+            return CT, ActorManager.getCTNode(v) or ActorManager.getCreatureNode(v)
+        end
+    end
+    return ActorManager.getTypeAndNode(v)
+end
+
+-- Helper to safely check effects using modern API if available
+local function hasEffectSafe(nodeCT, sEffectLabel)
+    if EffectManager.hasEffect then
+        return EffectManager.hasEffect(nodeCT, sEffectLabel)
+    elseif EffectManager5E and EffectManager5E.hasEffect then
+        return EffectManager5E.hasEffect(nodeCT, sEffectLabel)
+    end
+    return false
+end
+
 function onInit()
     USER_ISHOST = User.isHost()
 -- TODO: Option for usesperiod when creating RE power, default to Daily/''.  Other's are Rest/'enc' and Once/'once'
@@ -124,7 +155,7 @@ end
 function getOrCreateRelentlessEndurancePower(vActor)
     if not vActor or not ActorManager.isPC(vActor) then return nil end
 
-    local rCurrentActor = ActorManager.resolveActor(vActor)
+    local rCurrentActor = getActorSafe(vActor)
     local nodeCharSheet = DB.findNode(rCurrentActor.sCreatureNode)
     for _,vPower in pairs(DB.getChildren(nodeCharSheet, "powers")) do
         if DB.getValue(vPower, NAME, ""):lower() == RELENTLESS_ENDURANCE_LOWER then
@@ -227,7 +258,7 @@ function getTargetHealthData_FGU(sTargetNodeType, nodeTarget, rRoll)
 end
 
 function hasRelentlessEnduranceTrait(vActor, rRoll)
-    local sTargetNodeType, nodeTarget = ActorManager.getTypeAndNode(vActor)
+    local sTargetNodeType, nodeTarget = getTypeAndNodeSafe(vActor)
 	if not nodeTarget then return end
 
     local aTraits
@@ -269,7 +300,7 @@ end
 function processRelentlessEndurance(aRelentlessEnduranceData, nTotal, sDamage, rSource, rTarget, bSecret, rDamageRoll)
     local nAllHP = aRelentlessEnduranceData.nTotalHP + aRelentlessEnduranceData.nTempHP
     if aRelentlessEnduranceData.nWounds + nTotal >= nAllHP
-    and not EffectManager5E.hasEffect(rTarget, UNCONSCIOUS_EFFECT_LABEL) then
+    and not hasEffectSafe(rTarget, UNCONSCIOUS_EFFECT_LABEL) then
         local sDisplayName = ActorManager.getDisplayName(rTarget)
         local vPower = getOrCreateRelentlessEndurancePower(rTarget)
         local nPrepared, nCast = getPreparedAndCastFromRelentlessEndurancePower(vPower)
@@ -305,7 +336,7 @@ function setCastValueOnPower(vPower, nCast)
 end
 
 function applyRelentlessEndurance(nodeCT)
-    local sNodeType = ActorManager.getTypeAndNode(nodeCT)
+    local sNodeType = getTypeAndNodeSafe(nodeCT)
     local sWounds
     if sNodeType == PC then
         sWounds = HP_WOUNDS
@@ -322,12 +353,12 @@ function applyRelentlessEndurance(nodeCT)
         return
     end
 
-    if not EffectManager5E.hasEffect(nodeCT, UNCONSCIOUS_EFFECT_LABEL) then
+    if not hasEffectSafe(nodeCT, UNCONSCIOUS_EFFECT_LABEL) then
         displayChatMessage(sDisplayName .. " is not an unconscious actor, skipping Relentless Endurance application.")
         return
     end
 
-    local nodeTarget = select(2, ActorManager.getTypeAndNode(nodeCT))
+    local nodeTarget = select(2, getTypeAndNodeSafe(nodeCT))
     local vPower = getOrCreateRelentlessEndurancePower(nodeTarget)
     local nPrepared, nCast = getPreparedAndCastFromRelentlessEndurancePower(vPower)
     if nCast < nPrepared then
