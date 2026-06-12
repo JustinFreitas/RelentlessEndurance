@@ -1,4 +1,6 @@
 -- This extension contains 5e SRD Half-Orc racial trait rules.  For license details see file: Open Gaming License v1.0a.txt
+local USER_ISHOST = false
+
 local ActionDamage_applyDamage
 local CT = "ct"
 local HP_TEMPORARY = "hp.temporary"
@@ -11,8 +13,23 @@ local PC = "pc"
 local RELENTLESS_ENDURANCE = "Relentless Endurance"
 local RELENTLESS_ENDURANCE_LOWER = RELENTLESS_ENDURANCE:lower()
 local UNCONSCIOUS_EFFECT_LABEL = "Unconscious"
-local USER_ISHOST = false
 local WOUNDS = "wounds"
+
+-- FGU is FG version 4 and above; FGC is 3.x. Several APIs differ between the two.
+local function isClientFGU()
+    return Session.VersionMajor >= 4
+end
+
+-- Helper to safely check if a string is blank, preferring the modern StringManager method.
+local function isBlankSafe(s)
+    if StringManager.isBlank then
+        return StringManager.isBlank(s)
+    end
+    if type(s) ~= "string" then
+        return false
+    end
+    return (string.gsub(s, "%s+", "") == "")
+end
 
 -- Helper to safely get an actor from a node/string, preferring the modern getActor method.
 local function getActorSafe(v)
@@ -22,7 +39,7 @@ local function getActorSafe(v)
     return ActorManager.resolveActor(v)
 end
 
--- Helper to safely get the target node type and node, preferring modern methods.
+-- Helper to safely get the target node type and node, preferring modern non-deprecated methods.
 local function getTypeAndNodeSafe(v)
     if ActorManager.isPC and ActorManager.getCreatureNode and ActorManager.getCTNode then
         local bIsPC = ActorManager.isPC(v)
@@ -32,35 +49,83 @@ local function getTypeAndNodeSafe(v)
             return CT, ActorManager.getCTNode(v) or ActorManager.getCreatureNode(v)
         end
     end
-    return ActorManager.getTypeAndNode(v)
+    if ActorManager.getTypeAndNode then
+        return ActorManager.getTypeAndNode(v)
+    end
+    return ActorManager.getActorTypeAndNode(v)
 end
 
--- Helper to safely check effects using modern API if available
-local function hasEffectSafe(nodeCT, sEffectLabel)
+-- Helper to safely check for effects, preferring the modern CoreRPG or 5E-specific EffectManager if available.
+local function hasEffectSafe(rActor, sEffect, rTarget, bTargetedOnly)
     if EffectManager.hasEffect then
-        return EffectManager.hasEffect(nodeCT, sEffectLabel)
-    elseif EffectManager5E and EffectManager5E.hasEffect then
-        return EffectManager5E.hasEffect(nodeCT, sEffectLabel)
+        return EffectManager.hasEffect(rActor, sEffect, rTarget, bTargetedOnly)
     end
-    return false
+    if EffectManager5E and EffectManager5E.hasEffect then
+        return EffectManager5E.hasEffect(rActor, sEffect, rTarget, bTargetedOnly)
+    end
+    return EffectManager.hasEffect(rActor, sEffect)
+end
+
+-- Helper to safely call the ruleset's damage application function.
+local function applyDamageFinal(rSource, rTarget, rRoll, bSecret, sDamage, nTotal)
+    if type(ActionDamage_applyDamage) == "function" then
+        if isClientFGU() then
+            ActionDamage_applyDamage(rSource, rTarget, rRoll)
+        else
+            ActionDamage_applyDamage(rSource, rTarget, bSecret, sDamage, nTotal)
+        end
+    elseif ActionHealthD20 and type(ActionHealthD20.apply) == "function" then
+         ActionHealthD20.apply(rSource, rTarget, rRoll)
+    elseif ActionDamage then
+        if type(ActionDamage.applyDamage) == "function" then
+            if isClientFGU() then
+                ActionDamage.applyDamage(rSource, rTarget, rRoll)
+            else
+                ActionDamage.applyDamage(rSource, rTarget, bSecret, sDamage, nTotal)
+            end
+        elseif type(ActionDamage.apply) == "function" then
+            if isClientFGU() then
+                ActionDamage.apply(rSource, rTarget, rRoll)
+            else
+                ActionDamage.apply(rSource, rTarget, bSecret, sDamage, nTotal)
+            end
+        end
+    end
 end
 
 function onInit()
     USER_ISHOST = User.isHost()
--- TODO: Option for usesperiod when creating RE power, default to Daily/''.  Other's are Rest/'enc' and Once/'once'
--- TODO: Option for prepared count when creating RE power, default to 1.
--- TODO: Option for Automatically setting the RE effect on the actor so that it's enabled on combat start (vs not there and player has to enable if they want to use it), default to On.  Automatic mode should add/remove effect based on available uses on each actor's turn.
+
+    -- Initialize upvalues on all instances (Host and Client)
+    if ActionHealthD20 and ActionHealthD20.apply then
+        ActionDamage_applyDamage = ActionHealthD20.apply
+    elseif ActionDamage then
+        if ActionDamage.applyDamage then
+            ActionDamage_applyDamage = ActionDamage.applyDamage
+        elseif ActionDamage.apply then
+            ActionDamage_applyDamage = ActionDamage.apply
+        end
+    end
+
 	if USER_ISHOST then
 		Comm.registerSlashHandler("relentless", processChatCommand) -- a command for status of current CT actor and also for subcommands (i.e. clear).
+
+        -- Hook damage functions to intercept damage rolls
         if ActionHealthD20 and ActionHealthD20.apply then
-            ActionDamage_applyDamage = ActionHealthD20.apply
             ActionHealthD20.apply = applyDamage_v2
-        elseif ActionDamage and ActionDamage.applyDamage then
-            ActionDamage_applyDamage = ActionDamage.applyDamage
-            if isClientFGU() then
-                ActionDamage.applyDamage = applyDamage_FGU
-            else
-                ActionDamage.applyDamage = applyDamage_FGC
+        elseif ActionDamage then
+            if ActionDamage.applyDamage then
+                if isClientFGU() then
+                    ActionDamage.applyDamage = applyDamage_FGU
+                else
+                    ActionDamage.applyDamage = applyDamage_FGC
+                end
+            elseif ActionDamage.apply then
+                if isClientFGU() then
+                    ActionDamage.apply = applyDamage_FGU
+                else
+                    ActionDamage.apply = applyDamage_FGC
+                end
             end
         end
     end
@@ -76,11 +141,11 @@ function applyDamage_FGC(rSource, rTarget, bSecret, sDamage, nTotal)
     local aRelentlessEnduranceData = hasRelentlessEnduranceTrait(rTarget, nil)
     local bRelentlessEnduranceTriggered
     if hasAvailableRelentlessEndurance(aRelentlessEnduranceData) then
-            bRelentlessEnduranceTriggered = processRelentlessEndurance(aRelentlessEnduranceData, nTotal, sDamage, rSource, rTarget, bSecret, nil)
+            bRelentlessEnduranceTriggered = processRelentlessEndurance(aRelentlessEnduranceData, nTotal, sDamage, rSource, rTarget, bSecret)
     end
 
     if not bRelentlessEnduranceTriggered then
-        ActionDamage_applyDamage(rSource, rTarget, bSecret, sDamage, nTotal)
+        applyDamageFinal(rSource, rTarget, nil, bSecret, sDamage, nTotal)
     end
 end
 
@@ -88,11 +153,11 @@ function applyDamage_FGU(rSource, rTarget, rRoll)
     local aRelentlessEnduranceData = hasRelentlessEnduranceTrait(rTarget, rRoll)
     local bRelentlessEnduranceTriggered
     if hasAvailableRelentlessEndurance(aRelentlessEnduranceData) then
-        bRelentlessEnduranceTriggered = processRelentlessEndurance(aRelentlessEnduranceData, rRoll.nTotal, rRoll.sDesc, rSource, rTarget, false, rRoll)
+        bRelentlessEnduranceTriggered = processRelentlessEndurance(aRelentlessEnduranceData, rRoll.nTotal, rRoll.sDesc, rSource, rTarget, false)
     end
 
     if not bRelentlessEnduranceTriggered then
-        ActionDamage_applyDamage(rSource, rTarget, rRoll)
+        applyDamageFinal(rSource, rTarget, rRoll)
     end
 end
 
@@ -109,16 +174,16 @@ function applyDamage_v2(rSource, rTarget, rRoll)
     local aRelentlessEnduranceData = hasRelentlessEnduranceTrait(rTarget, rRoll)
     local bRelentlessEnduranceTriggered
     if hasAvailableRelentlessEndurance(aRelentlessEnduranceData) and isDamageRoll then
-        bRelentlessEnduranceTriggered = processRelentlessEndurance(aRelentlessEnduranceData, rRoll.nTotal, rRoll.sDesc, rSource, rTarget, rRoll.bSecret, rRoll)
+        bRelentlessEnduranceTriggered = processRelentlessEndurance(aRelentlessEnduranceData, rRoll.nTotal, rRoll.sDesc, rSource, rTarget, rRoll.bSecret)
     end
 
     if not bRelentlessEnduranceTriggered then
-        ActionDamage_applyDamage(rSource, rTarget, rRoll)
+        applyDamageFinal(rSource, rTarget, rRoll)
     end
 end
 
 function displayChatMessage(sFormattedText)
-	if not sFormattedText then return end
+	if isBlankSafe(sFormattedText) then return end
 
 	local msg = {font = "msgfont", icon = "relentlessendurance_icon", secret = false, text = sFormattedText}
     Comm.addChatMessage(msg) -- local, not broadcast
@@ -152,17 +217,33 @@ function getDecomposedTraitName(aTrait)
     }
 end
 
-function getOrCreateRelentlessEndurancePower(vActor)
+-- Pure lookup: returns the existing Relentless Endurance power node, or nil. Never mutates the sheet.
+function findRelentlessEndurancePower(vActor)
     if not vActor or not ActorManager.isPC(vActor) then return nil end
 
     local rCurrentActor = getActorSafe(vActor)
+    if not rCurrentActor then return nil end
     local nodeCharSheet = DB.findNode(rCurrentActor.sCreatureNode)
+    if not nodeCharSheet then return nil end
     for _,vPower in pairs(DB.getChildren(nodeCharSheet, "powers")) do
         if DB.getValue(vPower, NAME, ""):lower() == RELENTLESS_ENDURANCE_LOWER then
             return vPower
         end
     end
 
+    return nil
+end
+
+function getOrCreateRelentlessEndurancePower(vActor)
+    if not vActor or not ActorManager.isPC(vActor) then return nil end
+
+    local vExisting = findRelentlessEndurancePower(vActor)
+    if vExisting then return vExisting end
+
+    local rCurrentActor = getActorSafe(vActor)
+    if not rCurrentActor then return nil end
+    local nodeCharSheet = DB.findNode(rCurrentActor.sCreatureNode)
+    if not nodeCharSheet then return nil end
     local nodePowers = nodeCharSheet.createChild("powers")
     if not nodePowers then
         return nil;
@@ -182,18 +263,20 @@ function getOrCreateRelentlessEndurancePower(vActor)
 end
 
 function getPreparedAndCastFromRelentlessEndurancePower(vPower)
+    if not vPower then return 0, 0 end
     return DB.getValue(vPower, "prepared", 0), DB.getValue(vPower, "cast", 0)
 end
 
 function getRelentlessEnduranceData(aTraits, sTargetNodeType, nodeTarget, rRoll)
-    local vPower = getOrCreateRelentlessEndurancePower(nodeTarget)
+    -- Read-only path: do not create the power here. Creation is deferred until RE actually triggers.
+    local vPower = findRelentlessEndurancePower(nodeTarget)
     local nPrepared, nCast = getPreparedAndCastFromRelentlessEndurancePower(vPower)
-    local aTargetHealthData
-    if isClientFGU() then
-        aTargetHealthData = getTargetHealthData_FGU(sTargetNodeType, nodeTarget, rRoll)
-    else
-        aTargetHealthData = getTargetHealthData_FGC(sTargetNodeType, nodeTarget)
+    -- A PC with the trait but no power node yet still has one available use by default
+    -- (matching the power that getOrCreateRelentlessEndurancePower would create on trigger).
+    if not vPower and sTargetNodeType == PC then
+        nPrepared = 1
     end
+    local aTargetHealthData = getTargetHealthData(sTargetNodeType, nodeTarget, rRoll)
 
     return {
         nTotalHP = aTargetHealthData.nTotalHP,
@@ -206,14 +289,11 @@ function getRelentlessEnduranceData(aTraits, sTargetNodeType, nodeTarget, rRoll)
 end
 
 function getTargetHealthData_FGC(sTargetNodeType, nodeTarget)
+    -- Default to the PC-style hp paths.
     local nTotalHP = DB.getValue(nodeTarget, HP_TOTAL, 0)
     local nTempHP = DB.getValue(nodeTarget, HP_TEMPORARY, 0)
     local nWounds = DB.getValue(nodeTarget, HP_WOUNDS, 0)
-	if sTargetNodeType == PC then
-		nTotalHP = DB.getValue(nodeTarget, HP_TOTAL, 0)
-		nTempHP = DB.getValue(nodeTarget, HP_TEMPORARY, 0)
-		nWounds = DB.getValue(nodeTarget, HP_WOUNDS, 0)
-    elseif sTargetNodeType == CT then
+    if sTargetNodeType == CT then
 		nTotalHP = DB.getValue(nodeTarget, HPTOTAL, 0)
 		nTempHP = DB.getValue(nodeTarget, HPTEMP, 0)
 		nWounds = DB.getValue(nodeTarget, WOUNDS, 0)
@@ -227,19 +307,12 @@ function getTargetHealthData_FGC(sTargetNodeType, nodeTarget)
 end
 
 function getTargetHealthData_FGU(sTargetNodeType, nodeTarget, rRoll)
+    -- Default to the PC-style hp paths.
     local nTotalHP = DB.getValue(nodeTarget, HP_TOTAL, 0)
     local nTempHP = DB.getValue(nodeTarget, HP_TEMPORARY, 0)
     local nWounds = DB.getValue(nodeTarget, HP_WOUNDS, 0)
-	if sTargetNodeType == PC then
-		nTotalHP = DB.getValue(nodeTarget, HP_TOTAL, 0)
-		nTempHP = DB.getValue(nodeTarget, HP_TEMPORARY, 0)
-		nWounds = DB.getValue(nodeTarget, HP_WOUNDS, 0)
-    elseif sTargetNodeType == CT then
-		nTotalHP = DB.getValue(nodeTarget, HPTOTAL, 0)
-		nTempHP = DB.getValue(nodeTarget, HPTEMP, 0)
-		nWounds = DB.getValue(nodeTarget, WOUNDS, 0)
-	elseif sTargetNodeType == CT and ActorManager.isRecordType(nodeTarget, "vehicle") then
-		if (rRoll.sSubtargetPath or "") ~= "" then
+    if sTargetNodeType == CT and ActorManager.isRecordType(nodeTarget, "vehicle") then
+		if (rRoll and (rRoll.sSubtargetPath or "") ~= "") then
 			nTotalHP = DB.getValue(DB.getPath(rRoll.sSubtargetPath, "hp"), 0)
 			nWounds = DB.getValue(DB.getPath(rRoll.sSubtargetPath, WOUNDS), 0)
 			nTempHP = 0
@@ -248,6 +321,10 @@ function getTargetHealthData_FGU(sTargetNodeType, nodeTarget, rRoll)
 			nTempHP = DB.getValue(nodeTarget, HPTEMP, 0)
 			nWounds = DB.getValue(nodeTarget, WOUNDS, 0)
 		end
+    elseif sTargetNodeType == CT then
+		nTotalHP = DB.getValue(nodeTarget, HPTOTAL, 0)
+		nTempHP = DB.getValue(nodeTarget, HPTEMP, 0)
+		nWounds = DB.getValue(nodeTarget, WOUNDS, 0)
 	end
 
     return {
@@ -255,6 +332,14 @@ function getTargetHealthData_FGU(sTargetNodeType, nodeTarget, rRoll)
         nTempHP = nTempHP,
         nWounds = nWounds
     }
+end
+
+function getTargetHealthData(sTargetNodeType, nodeTarget, rRoll)
+    if isClientFGU() then
+        return getTargetHealthData_FGU(sTargetNodeType, nodeTarget, rRoll)
+    else
+        return getTargetHealthData_FGC(sTargetNodeType, nodeTarget)
+    end
 end
 
 function hasRelentlessEnduranceTrait(vActor, rRoll)
@@ -278,12 +363,8 @@ function hasRelentlessEnduranceTrait(vActor, rRoll)
     end
 end
 
-function isClientFGU()
-    return Session.VersionMajor >= 4
-end
-
 function processChatCommand(_, sParams)
-    if sParams == nil or sParams == "" then
+    if isBlankSafe(sParams) then
         displayChatMessage("Usage: /relentless CT_Actor_Display_Name_Case_Sensitive")
         return
     end
@@ -297,38 +378,53 @@ function processChatCommand(_, sParams)
     applyRelentlessEndurance(nodeCT)
 end
 
-function processRelentlessEndurance(aRelentlessEnduranceData, nTotal, sDamage, rSource, rTarget, bSecret, rDamageRoll)
-    local nAllHP = aRelentlessEnduranceData.nTotalHP + aRelentlessEnduranceData.nTempHP
-    if aRelentlessEnduranceData.nWounds + nTotal >= nAllHP
-    and not hasEffectSafe(rTarget, UNCONSCIOUS_EFFECT_LABEL) then
-        local sDisplayName = ActorManager.getDisplayName(rTarget)
-        local vPower = getOrCreateRelentlessEndurancePower(rTarget)
-        local nPrepared, nCast = getPreparedAndCastFromRelentlessEndurancePower(vPower)
-        -- TODO: Mark the Power as used.
-        if nCast >= nPrepared then
-            displayChatMessage(sDisplayName .. " has used all of their Relentless Endurance for the day.")
-            return
-        end
+function processRelentlessEndurance(aRelentlessEnduranceData, nTotal, sDamage, rSource, rTarget, bSecret)
+    local nDamageTotal = tonumber(nTotal or 0)
+    local nMaxHP = tonumber(aRelentlessEnduranceData.nTotalHP or 0)
+    local nWounds = tonumber(aRelentlessEnduranceData.nWounds or 0)
+    local nTempHP = tonumber(aRelentlessEnduranceData.nTempHP or 0)
 
-        setCastValueOnPower(vPower, nCast + 1)
-        nTotal = nAllHP - aRelentlessEnduranceData.nWounds - 1
-        sDamage = string.gsub(sDamage, "=%-?%d+", "=" .. nTotal)
+    -- Temporary HP absorbs damage before real HP; only the remainder reduces actual HP.
+    local nDamageToHP = math.max(0, nDamageTotal - nTempHP)
+    local nHPRemainingAfter = (nMaxHP - nWounds) - nDamageToHP
 
-        if ActionHealthD20 and ActionHealthD20.apply then
-            rDamageRoll.nTotal = tonumber(nTotal)
-            rDamageRoll.sDesc = sDamage
-            ActionDamage_applyDamage(rSource, rTarget, rDamageRoll)
-        elseif isClientFGU() then
-            rDamageRoll.nTotal = tonumber(nTotal)
-            rDamageRoll.sDesc = sDamage
-            ActionDamage_applyDamage(rSource, rTarget, rDamageRoll)
-        else
-            ActionDamage_applyDamage(rSource, rTarget, bSecret, sDamage, nTotal)
-        end
+    -- RE only matters if this would reduce the actor to 0 or fewer hit points.
+    if nHPRemainingAfter > 0 then return end
 
-        displayChatMessage("Relentless Endurance was applied to " .. sDisplayName .. ".")
-        return true
+    -- "but not killed outright": if leftover damage past 0 meets or exceeds the HP maximum,
+    -- the creature dies instantly and Relentless Endurance cannot save them.
+    if (-nHPRemainingAfter) >= nMaxHP then return end
+
+    if hasEffectSafe(rTarget, UNCONSCIOUS_EFFECT_LABEL) then return end
+
+    local sDisplayName = ActorManager.getDisplayName(rTarget)
+    -- Use tracking is power-based, which only exists for PCs. NPC half-orcs are intentionally
+    -- not auto-saved (use the /relentless command or radial menu to apply manually).
+    local vPower = getOrCreateRelentlessEndurancePower(rTarget)
+    if not vPower then return end
+
+    local nPrepared, nCast = getPreparedAndCastFromRelentlessEndurancePower(vPower)
+    if nCast >= nPrepared then
+        displayChatMessage(sDisplayName .. " has used all of their Relentless Endurance for the day.")
+        return
     end
+
+    setCastValueOnPower(vPower, nCast + 1)
+    -- Cap the damage so the actor is left at exactly 1 hit point (against real HP, ignoring temp HP).
+    local nDamageToApply = (nMaxHP - 1) - nWounds
+    sDamage = string.gsub(sDamage or "", "=%-?%d+", "=" .. nDamageToApply)
+
+    local rNewDamageRoll = {
+        sType = "damage",
+        sDesc = sDamage,
+        nTotal = tonumber(nDamageToApply),
+        aDice = {},
+        bSecret = bSecret
+    }
+    applyDamageFinal(rSource, rTarget, rNewDamageRoll, bSecret, sDamage, nDamageToApply)
+
+    displayChatMessage("Relentless Endurance was applied to " .. sDisplayName .. ".")
+    return true
 end
 
 function setCastValueOnPower(vPower, nCast)
@@ -336,7 +432,7 @@ function setCastValueOnPower(vPower, nCast)
 end
 
 function applyRelentlessEndurance(nodeCT)
-    local sNodeType = getTypeAndNodeSafe(nodeCT)
+    local sNodeType, nodeTarget = getTypeAndNodeSafe(nodeCT)
     local sWounds
     if sNodeType == PC then
         sWounds = HP_WOUNDS
@@ -358,14 +454,17 @@ function applyRelentlessEndurance(nodeCT)
         return
     end
 
-    local nodeTarget = select(2, getTypeAndNodeSafe(nodeCT))
+    -- Use tracking is power-based and only exists for PCs. For NPCs there is no power to
+    -- check, so the manual (GM-invoked) application simply proceeds.
     local vPower = getOrCreateRelentlessEndurancePower(nodeTarget)
-    local nPrepared, nCast = getPreparedAndCastFromRelentlessEndurancePower(vPower)
-    if nCast < nPrepared then
-        setCastValueOnPower(vPower, nCast + 1)
-    else
-        displayChatMessage(sDisplayName .. " has used all of their Relentless Endurance and none are available.")
-        return
+    if vPower then
+        local nPrepared, nCast = getPreparedAndCastFromRelentlessEndurancePower(vPower)
+        if nCast < nPrepared then
+            setCastValueOnPower(vPower, nCast + 1)
+        else
+            displayChatMessage(sDisplayName .. " has used all of their Relentless Endurance and none are available.")
+            return
+        end
     end
 
     DB.setValue(nodeTarget, sWounds, "number", aRelentlessEnduranceData.nTotalHP - 1)
