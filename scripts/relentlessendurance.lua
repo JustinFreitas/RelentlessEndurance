@@ -15,10 +15,7 @@ local RELENTLESS_ENDURANCE_LOWER = RELENTLESS_ENDURANCE:lower()
 local UNCONSCIOUS_EFFECT_LABEL = "Unconscious"
 local WOUNDS = "wounds"
 
--- FGU is FG version 4 and above; FGC is 3.x. Several APIs differ between the two.
-local function isClientFGU()
-    return Session.VersionMajor >= 4
-end
+
 
 -- Helper to safely check if a string is blank, preferring the modern StringManager method.
 local function isBlankSafe(s)
@@ -69,26 +66,14 @@ end
 -- Helper to safely call the ruleset's damage application function.
 local function applyDamageFinal(rSource, rTarget, rRoll, bSecret, sDamage, nTotal)
     if type(ActionDamage_applyDamage) == "function" then
-        if isClientFGU() then
-            ActionDamage_applyDamage(rSource, rTarget, rRoll)
-        else
-            ActionDamage_applyDamage(rSource, rTarget, bSecret, sDamage, nTotal)
-        end
+        ActionDamage_applyDamage(rSource, rTarget, rRoll)
     elseif ActionHealthD20 and type(ActionHealthD20.apply) == "function" then
          ActionHealthD20.apply(rSource, rTarget, rRoll)
     elseif ActionDamage then
         if type(ActionDamage.applyDamage) == "function" then
-            if isClientFGU() then
-                ActionDamage.applyDamage(rSource, rTarget, rRoll)
-            else
-                ActionDamage.applyDamage(rSource, rTarget, bSecret, sDamage, nTotal)
-            end
+            ActionDamage.applyDamage(rSource, rTarget, rRoll)
         elseif type(ActionDamage.apply) == "function" then
-            if isClientFGU() then
-                ActionDamage.apply(rSource, rTarget, rRoll)
-            else
-                ActionDamage.apply(rSource, rTarget, bSecret, sDamage, nTotal)
-            end
+            ActionDamage.apply(rSource, rTarget, rRoll)
         end
     end
 end
@@ -115,17 +100,9 @@ function onInit()
             ActionHealthD20.apply = applyDamage_v2
         elseif ActionDamage then
             if ActionDamage.applyDamage then
-                if isClientFGU() then
-                    ActionDamage.applyDamage = applyDamage_FGU
-                else
-                    ActionDamage.applyDamage = applyDamage_FGC
-                end
+                ActionDamage.applyDamage = applyDamage_FGU
             elseif ActionDamage.apply then
-                if isClientFGU() then
-                    ActionDamage.apply = applyDamage_FGU
-                else
-                    ActionDamage.apply = applyDamage_FGC
-                end
+                ActionDamage.apply = applyDamage_FGU
             end
         end
     end
@@ -288,23 +265,7 @@ function getRelentlessEnduranceData(aTraits, sTargetNodeType, nodeTarget, rRoll)
     }
 end
 
-function getTargetHealthData_FGC(sTargetNodeType, nodeTarget)
-    -- Default to the PC-style hp paths.
-    local nTotalHP = DB.getValue(nodeTarget, HP_TOTAL, 0)
-    local nTempHP = DB.getValue(nodeTarget, HP_TEMPORARY, 0)
-    local nWounds = DB.getValue(nodeTarget, HP_WOUNDS, 0)
-    if sTargetNodeType == CT then
-		nTotalHP = DB.getValue(nodeTarget, HPTOTAL, 0)
-		nTempHP = DB.getValue(nodeTarget, HPTEMP, 0)
-		nWounds = DB.getValue(nodeTarget, WOUNDS, 0)
-	end
 
-    return {
-        nTotalHP = nTotalHP,
-        nTempHP = nTempHP,
-        nWounds = nWounds
-    }
-end
 
 function getTargetHealthData_FGU(sTargetNodeType, nodeTarget, rRoll)
     -- Default to the PC-style hp paths.
@@ -335,11 +296,7 @@ function getTargetHealthData_FGU(sTargetNodeType, nodeTarget, rRoll)
 end
 
 function getTargetHealthData(sTargetNodeType, nodeTarget, rRoll)
-    if isClientFGU() then
-        return getTargetHealthData_FGU(sTargetNodeType, nodeTarget, rRoll)
-    else
-        return getTargetHealthData_FGC(sTargetNodeType, nodeTarget)
-    end
+    return getTargetHealthData_FGU(sTargetNodeType, nodeTarget, rRoll)
 end
 
 function hasRelentlessEnduranceTrait(vActor, rRoll)

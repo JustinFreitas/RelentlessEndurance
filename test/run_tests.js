@@ -253,19 +253,7 @@ async function runTests() {
     await runAssert("getTargetHealthData FGU total HP", 25, "return hDataFGU.nTotalHP");
     await runAssert("getTargetHealthData FGU wounds", 5, "return hDataFGU.nWounds");
 
-    // --- TEST 2: getTargetHealthData (FGC version returns FGC health paths) ---
-    await lua.doString(`
-        Session.VersionMajor = 3
-        nodeCharLegacy = { path = "charsheet.id-00002" }
-        DB.setNodeValue("charsheet.id-00002.hp.total", 15)
-        DB.setNodeValue("charsheet.id-00002.hp.wounds", 2)
-        hDataFGC = getTargetHealthData("pc", nodeCharLegacy, nil)
-    `);
-    await runAssert("getTargetHealthData FGC total HP", 15, "return hDataFGC.nTotalHP");
-    await runAssert("getTargetHealthData FGC wounds", 2, "return hDataFGC.nWounds");
-    
-    // Restore Session to FGU
-    await lua.doString("Session.VersionMajor = 4");
+
 
     // --- TEST 3: hasAvailableRelentlessEndurance ---
     await runAssert("hasAvailableRelentlessEndurance() simple check", true, "return hasAvailableRelentlessEndurance({nPrepared=1, nCast=0})");
