@@ -212,8 +212,8 @@ async function runTests() {
 
         -- Mock ActionDamage
         appliedDamageTotal = nil
-        function ActionDamage.applyDamage(rSource, rTarget, rRoll)
-            appliedDamageTotal = rRoll.nTotal
+        function ActionDamage.applyDamage(rSource, rTarget, bSecret, sDamage, nTotal)
+            appliedDamageTotal = nTotal
         end
     `);
 
@@ -242,17 +242,6 @@ async function runTests() {
         }
     }
 
-    // --- TEST 1: getTargetHealthData (FGU version returns FGU health paths) ---
-    await lua.doString(`
-        Session.VersionMajor = 4
-        nodeChar = { path = "charsheet.id-00001" }
-        DB.setNodeValue("charsheet.id-00001.hp.total", 25)
-        DB.setNodeValue("charsheet.id-00001.hp.wounds", 5)
-        hDataFGU = getTargetHealthData("pc", nodeChar, nil)
-    `);
-    await runAssert("getTargetHealthData FGU total HP", 25, "return hDataFGU.nTotalHP");
-    await runAssert("getTargetHealthData FGU wounds", 5, "return hDataFGU.nWounds");
-
     // --- TEST 2: getTargetHealthData (FGC version returns FGC health paths) ---
     await lua.doString(`
         Session.VersionMajor = 3
@@ -264,8 +253,8 @@ async function runTests() {
     await runAssert("getTargetHealthData FGC total HP", 15, "return hDataFGC.nTotalHP");
     await runAssert("getTargetHealthData FGC wounds", 2, "return hDataFGC.nWounds");
     
-    // Restore Session to FGU
-    await lua.doString("Session.VersionMajor = 4");
+    // Set Session to FGC
+    await lua.doString("Session.VersionMajor = 3");
 
     // --- TEST 3: hasAvailableRelentlessEndurance ---
     await runAssert("hasAvailableRelentlessEndurance() simple check", true, "return hasAvailableRelentlessEndurance({nPrepared=1, nCast=0})");
@@ -305,27 +294,25 @@ async function runTests() {
     await runAssert("hasRelentlessEnduranceTrait nTotalHP", 20, "return hasRelentlessEnduranceTrait(nodeCT).nTotalHP");
     await runAssert("hasRelentlessEnduranceTrait nPrepared", 1, "return hasRelentlessEnduranceTrait(nodeCT).nPrepared");
 
-    // --- TEST 6: applyDamage_v2 -> normal damage (HP remains > 0) ---
+    // --- TEST 6: applyDamage_FGC -> normal damage (HP remains > 0) ---
     await lua.doString(`
         appliedDamageTotal = nil
-        local roll = { sDesc = "[DAMAGE]", nTotal = 3, bSecret = false }
-        applyDamage_v2(nil, nodeCT, roll)
+        applyDamage_FGC(nil, nodeCT, false, "[DAMAGE]", 3)
     `);
     await runAssert("Normal damage applied", 3, "return appliedDamageTotal");
     await runAssert("Power not created on charsheet", false, "return DB.getValue('charsheet.id-00001.powers.child3', 'name', '') == 'Relentless Endurance'");
 
-    // --- TEST 7: applyDamage_v2 -> triggers Relentless Endurance (HP drops to 0, saved to 1) ---
+    // --- TEST 7: applyDamage_FGC -> triggers Relentless Endurance (HP drops to 0, saved to 1) ---
     await lua.doString(`
         appliedDamageTotal = nil
-        local roll = { sDesc = "[DAMAGE] sword", nTotal = 6, bSecret = false }
-        applyDamage_v2(nil, nodeCT, roll)
+        applyDamage_FGC(nil, nodeCT, false, "[DAMAGE] sword", 6)
     `);
     // Gromph has 5 HP. 6 damage would drop him to -1 HP.
     // It should set appliedDamageTotal to 4, leaving him at 1 HP.
     await runAssert("Relentless Endurance damage capped", 4, "return appliedDamageTotal");
     await runAssert("Relentless Endurance power cast incremented", 1, "return DB.getValue('charsheet.id-00001.powers.child3', 'cast', 0)");
 
-    // --- TEST 8: applyDamage_v2 -> instant death (damage exceeds max HP) ---
+    // --- TEST 8: applyDamage_FGC -> instant death (damage exceeds max HP) ---
     await lua.doString(`
         -- Reset power cast and wounds back to 15 (5 HP)
         DB.setValue({path='charsheet.id-00001.powers.child3'}, 'cast', 'number', 0)
@@ -333,8 +320,7 @@ async function runTests() {
         appliedDamageTotal = nil
         
         -- 25 damage (5 - 25 = -20, which is exactly negative max HP)
-        local roll = { sDesc = "[DAMAGE]", nTotal = 25, bSecret = false }
-        applyDamage_v2(nil, nodeCT, roll)
+        applyDamage_FGC(nil, nodeCT, false, "[DAMAGE]", 25)
     `);
     await runAssert("Instant death damage not capped", 25, "return appliedDamageTotal");
 
