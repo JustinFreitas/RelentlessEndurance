@@ -4,3 +4,4 @@ scripts/.luacheckrc
 build/out/RelentlessEndurance.ext
 build/out/RelentlessEndurance.zip
 .vscode/settings.json
+node_modules/
