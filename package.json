@@ -1,13 +1,13 @@
 {
   "name": "relentlessendurance",
-  "version": "1.0.0",
+  "version": "1.4.1",
   "description": "https://github.com/JustinFreitas/RelentlessEndurance",
   "main": "index.js",
   "directories": {
     "test": "test"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test/run_tests.js"
   },
   "repository": {
     "type": "git",
