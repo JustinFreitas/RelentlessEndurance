@@ -78,17 +78,54 @@ local function applyDamageFinal(rSource, rTarget, rRoll, bSecret, sDamage, nTota
     end
 end
 
-function onInit()
-    USER_ISHOST = User.isHost()
+-- Helper to distribute capped damage across [TYPE: ... (...=N)] clauses without breaking ActionHealthD20.applyDecodeDamage sum validation.
+function capDamageDescClauses(sDamage, nDamageToApply)
+    if not sDamage then
+        return ""
+    end
+    local bHasTypeClauses = false
+    local nRemaining = math.max(0, tonumber(nDamageToApply) or 0)
+    local sResult = string.gsub(sDamage, "(%[TYPE: [^(]* %([^=]+%=)(%-?%d+)(%)%])", function(sPrefix, sVal, sSuffix)
+        bHasTypeClauses = true
+        local nClauseVal = math.max(0, tonumber(sVal) or 0)
+        local nAlloc = math.min(nClauseVal, nRemaining)
+        nRemaining = nRemaining - nAlloc
+        return sPrefix .. tostring(nAlloc) .. sSuffix
+    end)
+    if bHasTypeClauses then
+        if nRemaining > 0 then
+            local bAdded = false
+            sResult = string.gsub(sResult, "(%[TYPE: [^(]* %([^=]+%=)(%-?%d+)(%)%])", function(sPrefix, sVal, sSuffix)
+                if not bAdded then
+                    bAdded = true
+                    local nClauseVal = tonumber(sVal) or 0
+                    return sPrefix .. tostring(nClauseVal + nRemaining) .. sSuffix
+                end
+                return sPrefix .. sVal .. sSuffix
+            end)
+        end
+        return sResult
+    end
+    return string.gsub(sDamage, "=%-?%d+", "=" .. tostring(nDamageToApply))
+end
 
-    -- Initialize upvalues on all instances (Host and Client)
+function onInit()
+    USER_ISHOST = (Session and Session.IsHost) or (User and User.isHost and User.isHost()) or false
+
+    -- Initialize upvalues on all instances (Host and Client) with idempotency guards
     if ActionHealthD20 and ActionHealthD20.apply then
-        ActionDamage_applyDamage = ActionHealthD20.apply
+        if ActionHealthD20.apply ~= applyDamage_v2 then
+            ActionDamage_applyDamage = ActionHealthD20.apply
+        end
     elseif ActionDamage then
         if ActionDamage.applyDamage then
-            ActionDamage_applyDamage = ActionDamage.applyDamage
+            if ActionDamage.applyDamage ~= applyDamage_FGU then
+                ActionDamage_applyDamage = ActionDamage.applyDamage
+            end
         elseif ActionDamage.apply then
-            ActionDamage_applyDamage = ActionDamage.apply
+            if ActionDamage.apply ~= applyDamage_FGU then
+                ActionDamage_applyDamage = ActionDamage.apply
+            end
         end
     end
 
@@ -97,12 +134,18 @@ function onInit()
 
         -- Hook damage functions to intercept damage rolls
         if ActionHealthD20 and ActionHealthD20.apply then
-            ActionHealthD20.apply = applyDamage_v2
+            if ActionHealthD20.apply ~= applyDamage_v2 then
+                ActionHealthD20.apply = applyDamage_v2
+            end
         elseif ActionDamage then
             if ActionDamage.applyDamage then
-                ActionDamage.applyDamage = applyDamage_FGU
+                if ActionDamage.applyDamage ~= applyDamage_FGU then
+                    ActionDamage.applyDamage = applyDamage_FGU
+                end
             elseif ActionDamage.apply then
-                ActionDamage.apply = applyDamage_FGU
+                if ActionDamage.apply ~= applyDamage_FGU then
+                    ActionDamage.apply = applyDamage_FGU
+                end
             end
         end
     end
@@ -369,7 +412,7 @@ function processRelentlessEndurance(aRelentlessEnduranceData, nTotal, sDamage, r
     setCastValueOnPower(vPower, nCast + 1)
     -- Cap the damage so the actor is left at exactly 1 hit point (against real HP, ignoring temp HP).
     local nDamageToApply = (nMaxHP - 1) - nWounds
-    sDamage = string.gsub(sDamage or "", "=%-?%d+", "=" .. nDamageToApply)
+    sDamage = capDamageDescClauses(sDamage or "", nDamageToApply)
 
     local rNewDamageRoll = {
         sType = "damage",

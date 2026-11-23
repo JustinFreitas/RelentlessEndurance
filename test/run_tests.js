@@ -338,6 +338,13 @@ async function runTests() {
     await runAssert("Unconscious effect removed", false, "return EffectManager.hasEffect(nodeCT, 'Unconscious')");
     await runAssert("Prone effect removed", false, "return EffectManager.hasEffect(nodeCT, 'Prone')");
 
+    // --- TEST 10: capDamageDescClauses distributes multi-type damage accurately ---
+    await runAssert(
+        "capDamageDescClauses multi-type damage distribution",
+        "[DAMAGE (M)] Greataxe [TYPE: slashing (1d12+3=6)] [TYPE: fire (1d6=2)]",
+        "return capDamageDescClauses('[DAMAGE (M)] Greataxe [TYPE: slashing (1d12+3=6)] [TYPE: fire (1d6=5)]', 8)"
+    );
+
     // 4. Print Summary
     console.log(`\nTest Summary: ${testsPassed} passed, ${testsFailed} failed.`);
     
