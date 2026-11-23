@@ -2,7 +2,7 @@
 
 https://github.com/JustinFreitas/RelentlessEndurance
 
-Relentless Endurance v1.4, by Justin Freitas
+Relentless Endurance v1.4.1, by Justin Freitas
 
 ReadMe and Usage Notes
 
@@ -18,6 +18,7 @@ There is also a manual path for an already-unconscious actor:
 - A chat command `/relentless` applies the same result to a Combat Tracker actor by display name (case sensitive). The first match found is used. For example: `/relentless Zeb the Half-Orc`
 
 Changelist:
+- v1.4.1 - Fix multi-type damage clause capping (proportional distribution across damage types to prevent damage total mismatch), add strict /reload and campaign lifecycle idempotency guards, and clean build package.
 - v1.4 - Temporary HP is now absorbed before the trait triggers; the "killed outright" instant-death case no longer triggers the trait; the Relentless Endurance power is no longer created during ordinary damage reads (only when the trait actually triggers); the FGU vehicle subtarget health branch is now reachable; assorted cleanup.
 - v1.0.2 - Use safe wrapper functions for getting actors and effects; fix deprecated ActorManager and EffectManager5E usage.
 - v1.0 - Initial version.
